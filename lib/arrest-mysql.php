@@ -41,6 +41,19 @@ class ArrestMySQL {
      * @var array
      */
     private $table_index;
+    /**
+     * Array of tables for admin only
+     *
+     * @var array
+     */
+    private $admin_tables;
+    /**
+     * Admin access setting
+     *
+     * @var boolean
+     */
+    private $admin_access;
+
 
     /**
      * Create an instance, optionally setting a base URI
@@ -63,9 +76,11 @@ class ArrestMySQL {
         $this->db = new Database($db_config);
         if(!$this->db->init()) throw new Exception($this->db->get_error());
         
-	    $this->db_structure = $this->map_db($db_config['database']);
+	      $this->db_structure = $this->map_db($db_config['database']);
         $this->segments = $this->get_uri_segments($base_uri);
         $this->table_index = array();
+        $this->admin_tables = array();
+        $this->admin_access = false;
     }
     
     /**
@@ -76,6 +91,16 @@ class ArrestMySQL {
     public function rest()
     {
         header('Content-type: application/json');
+
+        $table = $this->segment(0);
+        if(in_array($table, $this->admin_tables) && !$this->admin_access) {
+          $error = array('error' => array(
+            'message' => 'Forbidden',
+            'code' => 403
+          ));
+          die(json_encode($error));
+        }
+
         /*
         create > POST   /table
         read   > GET    /table[/id]
@@ -109,7 +134,30 @@ class ArrestMySQL {
     {
         $this->table_index[$table] = $field;
     }
-    
+
+    /**
+     * Set the tables accessible only if admin
+     *
+     * @param array $tables List of tables
+     * @access public
+     */
+    public function set_admin_tables($tables)
+    {
+        $this->admin_tables = $tables;
+    }
+
+    /**
+     * Set admin access
+     *
+     * @param boolean $access Boolean for admin access
+     * @access public
+     */
+    public function set_admin_access($access)
+    {
+        $this->admin_access = $access;
+    }
+
+
     /**
      * Map the stucture of the MySQL db to an array
      *
@@ -217,10 +265,10 @@ class ArrestMySQL {
     {
         $table = $this->segment(0);
         $id = intval($this->segment(1));
-        
+
         if(!$table || !isset($this->db_structure[$table])){
             $error = array('error' => array(
-                'message' => 'Not Found',
+                'message' => "Table not Found: $table",
                 'code' => 404
             ));
             die(json_encode($error));
